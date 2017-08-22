@@ -1,0 +1,8 @@
+[package]
+name = "http-server"
+version = "0.1.0"
+authors = ["sblundy <el_gonzzo@hotmail.com>"]
+
+[dependencies]
+
+bufstream = "0.1.3"

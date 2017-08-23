@@ -5,17 +5,22 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 
+type Job = Box<FnBox + Send + 'static>;
+
+enum Message {
+    NewJob(Job),
+    Terminate,
+}
+
 pub struct ThreadPool {
     threads: Vec<Worker>,
-    sender: Sender<Job>
+    sender: Sender<Message>
 }
 
 struct Worker {
     id: usize,
-    handle: JoinHandle<()>
+    handle: Option<JoinHandle<()>>
 }
-
-type Job = Box<FnBox + Send + 'static>;
 
 impl ThreadPool {
     pub fn new(num: usize) -> ThreadPool {
@@ -36,17 +41,39 @@ impl ThreadPool {
     pub fn execute<F>(&self, f: F)
         where F: FnOnce() + Send + 'static {
         let job = Box::new(f);
-        self.sender.send(job).unwrap();
+        self.sender.send(Message::NewJob(job)).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        for _ in &mut self.threads {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+
+        for worker in &mut self.threads {
+            println!("Shutting down worker {}", worker.id);
+            if let Some(handle) = worker.handle.take() {
+                match handle.join() {
+                    Ok(_) => {},
+                    Err(_) => println!("Error in shutdown")
+                }
+            }
+        }
     }
 }
 
 impl Worker {
-    fn new(id: usize, rx: Arc<Mutex<Receiver<Job>>>) -> Worker {
+    fn new(id: usize, rx: Arc<Mutex<Receiver<Message>>>) -> Worker {
         let handle = spawn(move || {
             loop {
                 match rx.lock() {
                     Ok(lock) => match lock.recv() {
-                        Ok(job) => job.call_box(),
+                        Ok(Message::NewJob(job)) => job.call_box(),
+                        Ok(Message::Terminate) => {
+                            println!("Terminating worker {}", id);
+                            break
+                        },
                         Err(e) => println!("Error receiving job:{}", e)
                     },
                     Err(e) => println!("Error receiving lock:{}", e)
@@ -55,7 +82,7 @@ impl Worker {
         });
         Worker {
             id,
-            handle
+            handle: Some(handle)
         }
     }
 }

@@ -6,3 +6,4 @@ authors = ["sblundy <el_gonzzo@hotmail.com>"]
 [dependencies]
 
 bufstream = "0.1.3"
+clap = "2.24.1"

@@ -1,10 +1,9 @@
-use std::net::TcpStream;
-use std::io::{Write, BufRead};
+use std::io::{Read, Write, BufRead};
 use bufstream::BufStream;
 use super::content_manager::{ContentHandle, ContentManager};
 use super::http::{parse_headers, parse_request_line, Request, BadRequest};
 
-pub fn handle_client<H: ContentHandle>(stream: TcpStream, manager: &ContentManager<H>) {
+pub fn handle_client<H: ContentHandle, S: Read + Write>(stream: S, manager: &ContentManager<H>) {
     println!("in handle_client");
 
     let mut buffed = BufStream::new(stream);

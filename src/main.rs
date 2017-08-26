@@ -4,6 +4,7 @@ use clap::{Arg, App};
 
 extern crate clap;
 extern crate bufstream;
+extern crate chrono;
 
 mod server;
 

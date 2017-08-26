@@ -2,6 +2,10 @@ use std::path::{Path, PathBuf};
 use std::io::Write;
 use std::io;
 use std::fs::File;
+use std::fs::metadata;
+use chrono::{DateTime, TimeZone};
+use chrono::offset::Utc;
+use std::cmp::Ordering;
 use super::content_manager::{ContentHandle, ContentManager};
 
 pub struct FileSystemAdapter {
@@ -27,6 +31,14 @@ impl ContentManager<FileHandle> for FileSystemAdapter {
             url.clone()
         };
 
+        let mod_date = match metadata(self.root.join(path.clone())) {
+            Ok(md) => md.modified().unwrap(),
+            Err(e) => {
+                println!("Error finding file {}:{}", &path, e);
+                return None
+            }
+        };
+
         if accepts_gzip {
             let mut gz_path = path.clone();
             gz_path.push_str(".gz");
@@ -34,6 +46,7 @@ impl ContentManager<FileHandle> for FileSystemAdapter {
             match File::open(gz_file_path) {
                 Ok(file) => {
                     return Some(FileHandle {
+                        mod_date: DateTime::from(mod_date),
                         gzipped: true,
                         file: file
                     })
@@ -47,6 +60,7 @@ impl ContentManager<FileHandle> for FileSystemAdapter {
         match File::open(file_path) {
             Ok(file) => {
                 Some(FileHandle {
+                    mod_date: DateTime::from(mod_date),
                     gzipped: false,
                     file: file
                 })
@@ -60,6 +74,7 @@ impl ContentManager<FileHandle> for FileSystemAdapter {
 }
 
 pub struct FileHandle {
+    mod_date: DateTime<Utc>,
     gzipped: bool,
     file: File
 }
@@ -68,7 +83,23 @@ impl ContentHandle for FileHandle {
     fn write_to(&mut self, writer: &mut Write) {
         io::copy(&mut self.file, writer).expect("Error while copying file\n");
     }
+
     fn is_gzipped(&self) -> bool {
         self.gzipped
+    }
+
+    fn is_mod_since<TZ: TimeZone>(&self, other: &DateTime<TZ>) -> bool {
+        let mod_time = self.mod_time();
+
+        let or = other.timestamp().cmp(&mod_time.timestamp());
+
+        match or {
+            Ordering::Greater | Ordering::Equal => true,
+            Ordering::Less => false
+        }
+    }
+
+    fn mod_time(&self) -> &DateTime<Utc> {
+        &self.mod_date
     }
 }

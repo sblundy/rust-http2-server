@@ -1,6 +1,6 @@
 use std::io::{Read, Write, BufRead};
 use bufstream::BufStream;
-use chrono::{FixedOffset,DateTime};
+use chrono::{FixedOffset,DateTime, Utc};
 use super::content_manager::{ContentHandle, ContentManager};
 use super::http::{parse_headers, parse_request_line, Request, BadRequest};
 
@@ -61,6 +61,10 @@ fn handle_get<H: ContentHandle>(url: String, gzip_encoding: bool, if_mod_since: 
                 None => {}
             }
             write!(buffed, "HTTP/1.1 200 OK\n").expect("Error while writing to output\n");
+            write!(buffed, "Connection: close\n").expect("Error while writing to output\n");
+            write!(buffed, "Date: {}\n", Utc::now().to_rfc2822()).expect("Error while writing to output\n");
+            write!(buffed, "Server: rust-http2-server\n").expect("Error while writing to output\n");
+            write!(buffed, "Content-Length:{}\n", handle.content_length()).expect("Error while writing to output\n");
             write!(buffed, "Last-Modified:{}\n", handle.mod_time().to_rfc2822()).expect("Error while writing to output\n");
 
             if handle.is_gzipped() {

@@ -9,6 +9,7 @@ pub trait ContentManager<H: ContentHandle> {
 pub trait ContentHandle {
     fn is_mod_since<TZ: TimeZone>(&self, other: &DateTime<TZ>) -> bool;
     fn mod_time(&self) -> &DateTime<Utc>;
+    fn content_length(&self) -> u64;
     fn is_gzipped(&self) -> bool;
     fn write_to(&mut self, writer: &mut Write);
 }

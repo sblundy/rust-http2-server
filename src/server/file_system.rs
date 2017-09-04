@@ -6,6 +6,7 @@ use std::fs::metadata;
 use chrono::{DateTime, TimeZone};
 use chrono::offset::Utc;
 use std::cmp::Ordering;
+use std::time::SystemTime;
 use super::content_manager::{ContentHandle, ContentManager};
 
 pub struct FileSystemAdapter {
@@ -31,52 +32,64 @@ impl ContentManager<FileHandle> for FileSystemAdapter {
             url.clone()
         };
 
-        let mod_date = match metadata(self.root.join(path.clone())) {
-            Ok(md) => md.modified().unwrap(),
-            Err(e) => {
-                println!("Error finding file {}:{}", &path, e);
-                return None
-            }
-        };
+        match get_file_stats(&self.root.join(path.clone())) {
+            Some(FileStats(mod_date, raw_len)) => {
+                if accepts_gzip {
+                    let mut gz_path = path.clone();
+                    gz_path.push_str(".gz");
+                    let gz_file_path = self.root.join(gz_path);
+                    if let Some(FileStats(_, gzipped_len)) = get_file_stats(&gz_file_path) {
+                        match File::open(gz_file_path) {
+                            Ok(file) => {
+                                return Some(FileHandle::new(mod_date.unwrap(), gzipped_len, true, file))
+                            },
+                            Err(_) => {}
+                        }
+                    }
+                }
 
-        if accepts_gzip {
-            let mut gz_path = path.clone();
-            gz_path.push_str(".gz");
-            let gz_file_path = self.root.join(gz_path);
-            match File::open(gz_file_path) {
-                Ok(file) => {
-                    return Some(FileHandle {
-                        mod_date: DateTime::from(mod_date),
-                        gzipped: true,
-                        file: file
-                    })
-                },
-                Err(_) => {}
-            }
-        }
-
-        let file_path = self.root.join(path);
-        println!("file_path={}", file_path.display());
-        match File::open(file_path) {
-            Ok(file) => {
-                Some(FileHandle {
-                    mod_date: DateTime::from(mod_date),
-                    gzipped: false,
-                    file: file
-                })
+                let file_path = self.root.join(path);
+                println!("file_path={}", file_path.display());
+                match File::open(file_path) {
+                    Ok(file) => Some(FileHandle::new(mod_date.unwrap(), raw_len, false, file)),
+                    Err(e) => {
+                        println!("Error opening {}:{}", url, e);
+                        None
+                    }
+                }
             },
-            Err(e) => {
-                println!("Error opening {}:{}", url, e);
-                None
-            }
+            None => None
         }
     }
 }
 
+struct FileStats(Option<SystemTime>, u64);
+
+fn get_file_stats(path: &PathBuf) -> Option<FileStats> {
+    match metadata(path) {
+        Ok(md) => Some(FileStats(md.modified().ok(), md.len())),
+        Err(e) => {
+            println!("Error finding file {}:{}", path.display(), e);
+            return None
+        }
+    }
+}
 pub struct FileHandle {
     mod_date: DateTime<Utc>,
+    content_length: u64,
     gzipped: bool,
     file: File
+}
+
+impl FileHandle {
+    fn new(mod_date: SystemTime, content_len: u64, gzipped: bool, file: File) -> FileHandle {
+        FileHandle {
+            mod_date: DateTime::from(mod_date),
+            content_length: content_len,
+            gzipped: gzipped,
+            file: file,
+        }
+    }
 }
 
 impl ContentHandle for FileHandle {
@@ -101,5 +114,8 @@ impl ContentHandle for FileHandle {
 
     fn mod_time(&self) -> &DateTime<Utc> {
         &self.mod_date
+    }
+    fn content_length(&self) -> u64 {
+       self.content_length
     }
 }

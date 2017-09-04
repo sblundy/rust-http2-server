@@ -64,7 +64,7 @@ fn main() {
                         None => server::serve(listener, root_path),
                         Some(ac) => server::serve_https(listener, root_path, ac)
                     },
-                    Err(e) => println!("Error on bind:{}", e)
+                    Err(e) => eprintln!("Error on bind:{}", e)
                 }
             }
         },

@@ -12,7 +12,7 @@ pub fn handle_client<H: ContentHandle, S: Read + Write>(stream: S, manager: &Con
     let request_line = match buffed.read_line(&mut line_buff) {
         Ok(_) => parse_request_line(&line_buff),
         Err(e) => {
-            println!("Bad request line:{}", e);
+            eprintln!("Bad request line:{}", e);
             Err(BadRequest {
                 code: "400",
                 reason: "Request line not understood",
@@ -40,7 +40,7 @@ pub fn handle_client<H: ContentHandle, S: Read + Write>(stream: S, manager: &Con
             handle_get(url, gzip_encoding, if_mod_since, &mut buffed, manager);
         }
         Err(BadRequest { code, reason }) => {
-            println!("Error:{}/{}", code, reason);
+            eprintln!("Error:{}/{}", code, reason);
             write!(&mut buffed, "HTTP/1.1 {} {}\n\n", code, reason).expect("Error while writing to output\n");
         }
     }
@@ -83,7 +83,7 @@ fn parse_if_mod_by(date_str: &str) -> Option<DateTime<FixedOffset>> {
     match DateTime::parse_from_rfc2822(date_str) {
         Ok(dt) => Some(dt),
         Err(e) => {
-            println!("Error parsing {}:{}", date_str, e);
+            eprintln!("Error parsing {}:{}", date_str, e);
             None
         }
     }

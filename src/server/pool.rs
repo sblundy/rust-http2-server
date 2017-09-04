@@ -56,7 +56,7 @@ impl Drop for ThreadPool {
             if let Some(handle) = worker.handle.take() {
                 match handle.join() {
                     Ok(_) => {},
-                    Err(_) => println!("Error in shutdown")
+                    Err(_) => eprintln!("Error in shutdown")
                 }
             }
         }
@@ -74,9 +74,9 @@ impl Worker {
                             println!("Terminating worker {}", id);
                             break
                         },
-                        Err(e) => println!("Error receiving job:{}", e)
+                        Err(e) => eprintln!("Error receiving job:{}", e)
                     },
-                    Err(e) => println!("Error receiving lock:{}", e)
+                    Err(e) => eprintln!("Error receiving lock:{}", e)
                 }
             }
         });

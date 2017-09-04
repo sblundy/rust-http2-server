@@ -53,7 +53,7 @@ impl ContentManager<FileHandle> for FileSystemAdapter {
                 match File::open(file_path) {
                     Ok(file) => Some(FileHandle::new(mod_date.unwrap(), raw_len, false, file)),
                     Err(e) => {
-                        println!("Error opening {}:{}", url, e);
+                        eprintln!("Error opening {}:{}", url, e);
                         None
                     }
                 }
@@ -69,7 +69,7 @@ fn get_file_stats(path: &PathBuf) -> Option<FileStats> {
     match metadata(path) {
         Ok(md) => Some(FileStats(md.modified().ok(), md.len())),
         Err(e) => {
-            println!("Error finding file {}:{}", path.display(), e);
+            eprintln!("Error finding file {}:{}", path.display(), e);
             return None
         }
     }

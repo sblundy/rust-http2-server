@@ -3,7 +3,6 @@ use std::path::Path;
 use clap::{Arg, App};
 use std::fs::File;
 use std::io::Read;
-use openssl::pkcs12::{Pkcs12, ParsedPkcs12};
 use openssl::ssl::{SslMethod, SslAcceptorBuilder, SslAcceptor};
 use openssl::pkey::PKey;
 use openssl::x509::X509;
@@ -119,21 +118,4 @@ fn load_cert(cert_path: &str, private_key_path: &str) -> Result<(PKey, X509), St
     };
 
     return Ok((pkey, x509));
-}
-
-fn load_pkcs12_cert(path: &str) -> Result<ParsedPkcs12, String> {
-    match File::open(path) {
-        Ok(mut file) => {
-            let mut pkcs12: Vec<u8> = vec![];
-            file.read_to_end(&mut pkcs12).unwrap();
-            match Pkcs12::from_der(&pkcs12) {
-                Ok(pkcs12) => match pkcs12.parse("") {
-                    Ok(identity) => Ok(identity),
-                    Err(_) => Err("Parse failed".to_string())
-                },
-                Err(_) => Err("from_der failed".to_string())
-            }
-        },
-        Err(_) => Err("Failed to open file".to_string())
-    }
 }

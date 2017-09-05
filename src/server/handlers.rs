@@ -37,7 +37,13 @@ pub fn handle_client<H: ContentHandle, S: Read + Write>(stream: S, manager: &Con
 
     match request_line {
         Ok(Request::GET { url }) => {
-            handle_get(url, gzip_encoding, if_mod_since, &mut buffed, manager);
+            handle_get(url, gzip_encoding, if_mod_since, false, &mut buffed, manager);
+        }
+        Ok(Request::HEAD { url }) => {
+            handle_get(url, gzip_encoding, if_mod_since, true, &mut buffed, manager);
+        }
+        Ok(Request::OPTIONS { url }) => {
+            handle_options(url, &mut buffed, manager);
         }
         Err(BadRequest { code, reason }) => {
             eprintln!("Error:{}/{}", code, reason);
@@ -48,9 +54,9 @@ pub fn handle_client<H: ContentHandle, S: Read + Write>(stream: S, manager: &Con
     println!("end handle_client")
 }
 
-fn handle_get<H: ContentHandle>(url: String, gzip_encoding: bool, if_mod_since: Option<DateTime<FixedOffset>>, buffed: &mut Write, manager: &ContentManager<H>) {
+fn handle_get<H: ContentHandle>(url: String, gzip_encoding: bool, if_mod_since: Option<DateTime<FixedOffset>>, suppress_entity: bool, buffed: &mut Write, manager: &ContentManager<H>) {
     match manager.find_content(&url, gzip_encoding) {
-        Some(mut handle) => {
+        Some(handle) => {
             match if_mod_since {
                 Some(dt) => {
                     if handle.is_mod_since(&dt) {
@@ -60,22 +66,60 @@ fn handle_get<H: ContentHandle>(url: String, gzip_encoding: bool, if_mod_since: 
                 },
                 None => {}
             }
-            write!(buffed, "HTTP/1.1 200 OK\n").expect("Error while writing to output\n");
-            write!(buffed, "Connection: close\n").expect("Error while writing to output\n");
-            write!(buffed, "Date: {}\n", Utc::now().to_rfc2822()).expect("Error while writing to output\n");
-            write!(buffed, "Server: rust-http2-server\n").expect("Error while writing to output\n");
-            write!(buffed, "Content-Length:{}\n", handle.content_length()).expect("Error while writing to output\n");
-            write!(buffed, "Last-Modified:{}\n", handle.mod_time().to_rfc2822()).expect("Error while writing to output\n");
-
+            let content_length = format!("{}", handle.content_length());
+            let last_modified = handle.mod_time().to_rfc2822();
+            let mut headers: Vec<(&str, &str)> = vec![
+                ("Content-Length", content_length.as_ref()),
+                ("Last-Modified", last_modified.as_ref())
+            ];
             if handle.is_gzipped() {
-                write!(buffed, "Content-Encoding:gzip\n").expect("Error while writing to output\n");
+                headers.push(("Content-Encoding", "gzip"));
             }
-            write!(buffed, "\n").expect("Error while writing to output\n");
-            handle.write_to(buffed)
+            write_response(buffed, "200", "OK", headers, if suppress_entity {None} else { Some(handle) });
         }
         None => {
             write!(buffed, "HTTP/1.1 404 Not Found\n\n").expect("Error while writing to output\n");
         }
+    }
+}
+
+fn handle_options<H: ContentHandle>(url: String, buffed: &mut Write,  manager: &ContentManager<H>) {
+    if "*".eq(&url) {
+        let headers: Vec<(&str, &str)> = vec![
+            ("Allow", "OPTIONS, GET, HEAD"),
+            ("Content-Length", "0")
+        ];
+        let handler: Option<H> = None;
+        write_response(buffed, "200", "OK", headers, handler);
+    } else {
+        match manager.find_content(&url, false) {
+            Some(_) => {
+                let headers: Vec<(&str, &str)> = vec![
+                    ("Allow", "OPTIONS, GET, HEAD"),
+                    ("Content-Length", "0")
+                ];
+                let handler: Option<H> = None;
+                write_response(buffed, "200", "OK", headers, handler);
+            }
+            None => {
+                write!(buffed, "HTTP/1.1 404 Not Found\n\n").expect("Error while writing to output\n");
+            }
+        }
+    }
+}
+
+fn write_response<H: ContentHandle>(buffed: &mut Write, code: &str, text: &str, headers: Vec<(&str, &str)>, handler: Option<H>) {
+    write!(buffed, "HTTP/1.1 {} {}\n", code, text).expect("Error while writing to output\n");
+    write!(buffed, "Connection: close\n").expect("Error while writing to output\n");
+    write!(buffed, "Date: {}\n", Utc::now().to_rfc2822()).expect("Error while writing to output\n");
+    write!(buffed, "Server: rust-http2-server\n").expect("Error while writing to output\n");
+    for (name, value) in headers {
+        writeln!(buffed, "{}: {}", name, value).expect("Error while writing header\n");
+    }
+    write!(buffed, "\n").expect("Error while terminating the headers\n");
+    match handler {
+        Some(mut h) => h.write_to(buffed),
+        None => {}
     }
 }
 

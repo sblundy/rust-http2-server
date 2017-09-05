@@ -5,6 +5,12 @@ use std::io::{BufRead};
 pub enum Request {
     GET {
         url: String
+    },
+    HEAD {
+        url: String
+    },
+    OPTIONS {
+        url: String
     }
 }
 
@@ -18,6 +24,12 @@ pub fn parse_request_line(input: &String) -> Result<Request, BadRequest> {
     match (parts.next(), parts.next()) {
         (Some("GET"), Some(url)) => {
             Ok(Request::GET { url: url.to_string() })
+        },
+        (Some("HEAD"), Some(url)) => {
+            Ok(Request::HEAD { url: url.to_string() })
+        },
+        (Some("OPTIONS"), Some(url)) => {
+            Ok(Request::OPTIONS { url: url.to_string() })
         },
         _ => Err(BadRequest { code: "400", reason: "" })
     }

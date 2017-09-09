@@ -1,17 +1,32 @@
 use std::result::Result;
 use std::collections::HashMap;
-use std::io::{BufRead};
+use std::io::{Write, BufRead};
+use chrono::{FixedOffset,DateTime};
+
+pub struct Headers {
+    headers: HashMap<String, String>
+}
+
+impl Headers {
+    pub fn accept_encoding_gzip(&self) -> bool {
+        match self.headers.get("Accept-Encoding") {
+            Some(encoding) => encoding.contains("gzip"),
+            None => false
+        }
+    }
+
+    pub fn if_modified_since(&self) -> Option<DateTime<FixedOffset>> {
+        match self.headers.get("If-Modified-Since") {
+            Some(date_str) => parse_if_mod_by(date_str),
+            None => None
+        }
+    }
+}
 
 pub enum Request {
-    GET {
-        url: String
-    },
-    HEAD {
-        url: String
-    },
-    OPTIONS {
-        url: String
-    }
+    Get(String, Headers),
+    Head(String, Headers),
+    Options(Option<String>, Headers)
 }
 
 pub struct BadRequest {
@@ -19,23 +34,52 @@ pub struct BadRequest {
     pub reason: &'static str
 }
 
-pub fn parse_request_line(input: &String) -> Result<Request, BadRequest> {
-    let mut parts = input.split(' ');
-    match (parts.next(), parts.next()) {
-        (Some("GET"), Some(url)) => {
-            Ok(Request::GET { url: url.to_string() })
-        },
-        (Some("HEAD"), Some(url)) => {
-            Ok(Request::HEAD { url: url.to_string() })
-        },
-        (Some("OPTIONS"), Some(url)) => {
-            Ok(Request::OPTIONS { url: url.to_string() })
-        },
-        _ => Err(BadRequest { code: "400", reason: "" })
+pub fn parse_request<S: BufRead + Write>(buffed: &mut S) -> Result<Request, BadRequest> {
+    let mut line_buff = String::new();
+    let request_line = match buffed.read_line(&mut line_buff) {
+        Ok(_) => parse_request_line(&line_buff),
+        Err(e) => {
+            eprintln!("Bad request line:{}", e);
+            return Err(BadRequest {
+                code: "400",
+                reason: "Request line not understood",
+            })
+        }
+    };
+
+    match request_line {
+        Ok((ref method, ref url)) if "GET".eq(method) => {
+            let headers = parse_headers(buffed);
+            return Ok(Request::Get(url.clone(), Headers { headers }));
+        }
+        Ok((ref method, ref url)) if "HEAD".eq(method) => {
+            let headers = parse_headers(buffed);
+            return Ok(Request::Head(url.clone(), Headers { headers }));
+        }
+        Ok((ref method, ref url)) if "OPTIONS".eq(method) && "*".eq(url) => {
+            let headers = parse_headers(buffed);
+            return Ok(Request::Options(None, Headers { headers }));
+        }
+        Ok((ref method, ref url)) if "OPTIONS".eq(method) => {
+            let headers = parse_headers(buffed);
+            return Ok(Request::Options(Some(url.clone()), Headers { headers }));
+        }
+        Ok((_, _)) => {
+            Err(BadRequest { code: "405", reason: "Method not supported"})
+        }
+        Err(bad_request) => Err(bad_request)
     }
 }
 
-pub fn parse_headers(reader: &mut BufRead) -> HashMap<String, String> {
+fn parse_request_line(input: &String) -> Result<(String, String), BadRequest> {
+    let mut parts = input.split(' ');
+    return match (parts.next(), parts.next()) {
+        (Some(method), Some(url)) => Ok((method.to_string(), url.to_string())),
+        _ => return Err(BadRequest { code: "400", reason: "" })
+    }
+}
+
+fn parse_headers(reader: &mut BufRead) -> HashMap<String, String> {
     let mut headers = HashMap::new();
     loop {
         let mut line = String::new();
@@ -60,17 +104,26 @@ pub fn parse_headers(reader: &mut BufRead) -> HashMap<String, String> {
     return headers;
 }
 
+fn parse_if_mod_by(date_str: &str) -> Option<DateTime<FixedOffset>> {
+    match DateTime::parse_from_rfc2822(date_str) {
+        Ok(dt) => Some(dt),
+        Err(e) => {
+            eprintln!("Error parsing {}:{}", date_str, e);
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_request_line,parse_headers};
-    use super::Request;
     use std::io::BufReader;
 
     #[test]
     fn it_works() {
         let output = parse_request_line(&"GET / HTTP/1.1\r\n".to_string());
         match output {
-            Ok(Request::GET { url }) => { assert_eq!(url, "/")},
+            Ok((method, url)) => { assert_eq!(method, "GET"); assert_eq!(url, "/")},
             _ => assert!(false)
         }
     }

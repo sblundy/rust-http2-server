@@ -1,8 +1,10 @@
 use std::result::Result;
 use std::collections::HashMap;
 use std::io::{Write, BufRead};
+use std::fmt;
 use chrono::{FixedOffset,DateTime};
 
+#[derive(Debug)]
 pub struct Headers {
     headers: HashMap<String, String>
 }
@@ -21,9 +23,17 @@ impl Headers {
             None => None
         }
     }
+
+    pub fn connection_keep_alive(&self) -> bool {
+        match self.headers.get("Connection") {
+            Some(value) => value.contains("keep-alive"),
+            None => true
+        }
+    }
 }
 
 pub enum Request {
+    EndRequests(),
     Get(String, Headers),
     Head(String, Headers),
     Options(Option<String>, Headers)
@@ -37,6 +47,7 @@ pub struct BadRequest {
 pub fn parse_request<S: BufRead + Write>(buffed: &mut S) -> Result<Request, BadRequest> {
     let mut line_buff = String::new();
     let request_line = match buffed.read_line(&mut line_buff) {
+        Ok(0) => return Ok(Request::EndRequests()),
         Ok(_) => parse_request_line(&line_buff),
         Err(e) => {
             eprintln!("Bad request line:{}", e);
@@ -75,7 +86,11 @@ fn parse_request_line(input: &String) -> Result<(String, String), BadRequest> {
     let mut parts = input.split(' ');
     return match (parts.next(), parts.next()) {
         (Some(method), Some(url)) => Ok((method.to_string(), url.to_string())),
-        _ => return Err(BadRequest { code: "400", reason: "" })
+        (Some(method), None) => {
+            eprintln!("No URL:method={}", method);
+            Err(BadRequest { code: "400", reason: "" })
+        },
+        _ => Err(BadRequest { code: "400", reason: "" })
     }
 }
 

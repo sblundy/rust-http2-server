@@ -1,7 +1,6 @@
 use std::result::Result;
 use std::collections::HashMap;
 use std::io::{Write, BufRead};
-use std::fmt;
 use chrono::{FixedOffset,DateTime};
 
 #[derive(Debug)]

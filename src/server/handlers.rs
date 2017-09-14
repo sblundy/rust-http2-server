@@ -27,7 +27,8 @@ pub fn handle_client<H: ContentHandle, S: Read + Write>(stream: S, manager: &Con
             }
             Err(BadRequest { code, reason }) => {
                 eprintln!("Error:{}/{}", code, reason);
-                write!(&mut buffed, "HTTP/1.1 {} {}\n\n", code, reason).expect("Error while writing to output\n");
+                let handler: Option<H> = None;
+                write_response(&mut buffed, code, reason, vec![], false, handler);
                 false
             }
         };
@@ -66,7 +67,8 @@ fn handle_get<H: ContentHandle>(url: String, gzip_encoding: bool, if_mod_since: 
             write_response(buffed, "200", "OK", headers, keep_alive,if suppress_entity {None} else { Some(handle) });
         }
         None => {
-            write!(buffed, "HTTP/1.1 404 Not Found\n\n").expect("Error while writing to output\n");
+            let handler: Option<H> = None;
+            write_response(buffed, "404", "Not Found", vec![], keep_alive, handler);
         }
     }
 }
@@ -89,10 +91,11 @@ fn handle_options<H: ContentHandle>(url_op: Option<String>, buffed: &mut Write, 
                         ("Content-Length", "0")
                     ];
                     let handler: Option<H> = None;
-                    write_response(buffed, "200", "OK", headers, false,handler);
+                    write_response(buffed, "200", "OK", headers, false, handler);
                 }
                 None => {
-                    write!(buffed, "HTTP/1.1 404 Not Found\n\n").expect("Error while writing to output\n");
+                    let handler: Option<H> = None;
+                    write_response(buffed, "404", "Not Found", vec![], false, handler);
                 }
             }
         }

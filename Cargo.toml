@@ -1,5 +1,5 @@
 [package]
-name = "http-server"
+name = "rust_https_server"
 version = "0.1.0"
 authors = ["sblundy <el_gonzzo@hotmail.com>"]
 
@@ -9,3 +9,8 @@ bufstream = "0.1.3"
 clap = "2.24.1"
 chrono = "0.4"
 openssl = "0.9.17"
+
+[dev-dependencies]
+
+reqwest = "0.7.3"
+hyper = "0.11.2"

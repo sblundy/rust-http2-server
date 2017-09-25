@@ -12,6 +12,7 @@ use openssl::stack::Stack;
 extern crate bufstream;
 extern crate chrono;
 extern crate openssl;
+extern crate byteorder;
 
 mod server;
 
